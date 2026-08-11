@@ -1,0 +1,120 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum DocumentRole {
+  owner
+  editor
+  commenter
+  viewer
+}
+
+model User {
+  id            String   @id @default(cuid())
+  name          String
+  email         String   @unique
+  passwordHash  String
+  createdAt     DateTime @default(now())
+
+  memberships   Membership[]
+  documentAcls  DocumentAcl[]
+  documentsMade Document[]     @relation("DocumentCreatedBy")
+  updatesWritten DocumentUpdate[]
+}
+
+model Workspace {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+
+  memberships Membership[]
+  documents   Document[]
+}
+
+// A user's membership in a workspace. Workspace-level role is coarse;
+// fine-grained access happens per document via DocumentAcl.
+model Membership {
+  id          String   @id @default(cuid())
+  role        DocumentRole @default(editor)
+  createdAt   DateTime @default(now())
+
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, workspaceId])
+  @@index([workspaceId])
+}
+
+model Document {
+  id          String   @id @default(cuid())
+  title       String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  createdById String
+  createdBy   User      @relation("DocumentCreatedBy", fields: [createdById], references: [id])
+
+  acl         DocumentAcl[]
+  updates     DocumentUpdate[]
+  snapshots   DocumentSnapshot[]
+
+  @@index([workspaceId])
+}
+
+// Per-document access control. Explicit rows override the implicit
+// workspace membership; a workspace member with no row here has no access.
+model DocumentAcl {
+  id         String       @id @default(cuid())
+  role       DocumentRole
+  createdAt  DateTime     @default(now())
+
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, userId])
+  @@index([documentId])
+}
+
+// Append-only log of binary Yjs updates. This is the source of truth;
+// a room is reconstructed by replaying every row in order.
+model DocumentUpdate {
+  id         BigInt   @id @default(autoincrement())
+  data       Bytes
+  createdAt  DateTime @default(now())
+
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  createdById String?
+  createdBy   User?   @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([documentId, id])
+}
+
+// Periodic compacted state (phase 4 will truncate the update log against
+// this). In phase 1 this exists in the schema but is not yet populated.
+model DocumentSnapshot {
+  id         String   @id @default(cuid())
+  data       Bytes
+  createdAt  DateTime @default(now())
+
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId, createdAt])
+}

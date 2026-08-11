@@ -1,0 +1,52 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  @apply bg-ink-50 text-ink-900 antialiased;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+/* Minimal prose styling for the TipTap document body */
+.ProseMirror {
+  outline: none;
+}
+.ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  color: theme("colors.ink.400");
+  pointer-events: none;
+}
+.ProseMirror h1 {
+  font-size: 1.6rem;
+  font-weight: 500;
+  margin: 1rem 0 0.5rem;
+}
+.ProseMirror h2 {
+  font-size: 1.3rem;
+  font-weight: 500;
+  margin: 0.9rem 0 0.4rem;
+}
+.ProseMirror ul,
+.ProseMirror ol {
+  padding-left: 1.4rem;
+  margin: 0.4rem 0;
+}
+.ProseMirror blockquote {
+  border-left: 3px solid theme("colors.ink.200");
+  padding-left: 1rem;
+  color: theme("colors.ink.600");
+  margin: 0.6rem 0;
+}
+.ProseMirror code {
+  background: theme("colors.ink.100");
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
+  font-size: 0.85em;
+}
