@@ -57,6 +57,10 @@ async function main() {
       create: { documentId: document.id, userId: u.user.id, role: u.role },
     });
   }
+
+  console.log("Seeded workspace 'demo' with document:", document.id);
+  console.log("Demo accounts (password: password123):");
+  for (const u of DEMO_USERS) console.log(`  ${u.role.padEnd(10)} ${u.email}`);
 }
 
 main()

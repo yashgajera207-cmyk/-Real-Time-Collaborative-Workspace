@@ -26,7 +26,12 @@ export default async function DocumentPage({
         <h1 className="truncate text-sm font-medium text-ink-900">{document.title}</h1>
       </header>
       <div className="flex-1 overflow-hidden">
-        <CollaborativeEditor documentId={documentId} role={role!} />
+        <CollaborativeEditor
+          documentId={documentId}
+          role={role!}
+          userId={session.user.id}
+          userName={session.user.name ?? session.user.email ?? "Anonymous"}
+        />
       </div>
     </div>
   );

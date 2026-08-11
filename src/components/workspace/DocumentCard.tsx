@@ -32,8 +32,8 @@ export function DocumentCard({ doc }: { doc: DocumentSummary }) {
           </span>
         </div>
         <p className="line-clamp-2 text-sm font-medium text-ink-900">{doc.title}</p>
-        <p className="text-xs text-ink-400" suppressHydrationWarning>
-          Updated {new Date(doc.updatedAt).toLocaleDateString("en-US")}
+        <p className="text-xs text-ink-400">
+          Updated {new Date(doc.updatedAt).toLocaleDateString()}
         </p>
       </Link>
     </motion.div>
