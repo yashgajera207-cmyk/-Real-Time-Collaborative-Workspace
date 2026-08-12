@@ -38,3 +38,42 @@ export async function appendUpdate(
     },
   });
 }
+
+/**
+ * Yjs XmlFragment#toString() renders tag-wrapped content (roughly
+ * "<paragraph>hello <bold>world</bold></paragraph>"). Good enough for a
+ * search index once tags are stripped - we're not trying to render it,
+ * just make its words findable.
+ */
+export function extractPlainText(doc: Y.Doc): string {
+  const xml = doc.getXmlFragment("prosemirror").toString();
+  return xml
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 20_000); // keep the index column bounded
+}
+
+export async function updateSearchText(documentId: string, doc: Y.Doc): Promise<void> {
+  const searchText = extractPlainText(doc);
+  await prisma.document.update({
+    where: { id: documentId },
+    data: { searchText, updatedAt: new Date() },
+  });
+}
+
+export async function createSnapshot(
+  documentId: string,
+  doc: Y.Doc,
+  options: { label?: string; createdById?: string } = {}
+): Promise<void> {
+  await prisma.documentSnapshot.create({
+    data: {
+      documentId,
+      data: Buffer.from(Y.encodeStateAsUpdate(doc)),
+      label: options.label ?? null,
+      createdById: options.createdById ?? null,
+    },
+  });
+}
+

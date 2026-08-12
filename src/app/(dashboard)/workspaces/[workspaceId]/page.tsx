@@ -21,7 +21,7 @@ export default async function WorkspacePage({
   if (!membership) notFound();
 
   const documents = await prisma.document.findMany({
-    where: { workspaceId, acl: { some: { userId: session.user.id } } },
+    where: { workspaceId, parentId: null, acl: { some: { userId: session.user.id } } },
     include: { acl: { where: { userId: session.user.id }, select: { role: true } } },
     orderBy: { updatedAt: "desc" },
   });

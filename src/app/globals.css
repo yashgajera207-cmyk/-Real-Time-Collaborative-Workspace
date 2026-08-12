@@ -56,34 +56,91 @@ body {
   position: relative;
   margin-left: -1px;
   margin-right: -1px;
-  border-left: 2px solid;
-  border-right: 0px;
+  border-left: 1.5px solid;
+  border-right: 1.5px solid;
   word-break: normal;
   pointer-events: none;
-}
-.collaboration-cursor__caret::before {
-  content: "\2060";
 }
 .collaboration-cursor__label {
   position: absolute;
   top: -1.4em;
-  left: -2px;
+  left: -1.5px;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 500;
   line-height: 1.4;
-  color: #ffffff;
+  color: #fff;
   white-space: nowrap;
   border-radius: 4px 4px 4px 0;
-  padding: 1px 5px;
+  padding: 0.05rem 0.4rem;
   user-select: none;
   pointer-events: none;
-  z-index: 50;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  animation: fade-in 0.15s ease-out;
 }
-.collaboration-cursor__selection,
-.ProseMirror-yjs-selection {
+.collaboration-cursor__selection {
   border-radius: 2px;
   opacity: 0.35;
-  box-decoration-break: clone;
-  -webkit-box-decoration-break: clone;
+}
+
+/* Rich text extras */
+.ProseMirror a {
+  color: theme("colors.accent.600");
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.ProseMirror img {
+  max-width: 100%;
+  border-radius: 8px;
+  margin: 0.5rem 0;
+}
+.ProseMirror ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0.2rem;
+}
+.ProseMirror ul[data-type="taskList"] li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+.ProseMirror ul[data-type="taskList"] li > label {
+  margin-top: 0.3rem;
+  user-select: none;
+}
+.ProseMirror ul[data-type="taskList"] li[data-checked="true"] > div {
+  color: theme("colors.ink.400");
+  text-decoration: line-through;
+}
+.ProseMirror pre {
+  background: theme("colors.ink.900");
+  color: theme("colors.ink.50");
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  font-size: 0.82em;
+  overflow-x: auto;
+  margin: 0.6rem 0;
+}
+.ProseMirror pre code {
+  background: none;
+  padding: 0;
+  color: inherit;
+}
+/* A minimal, theme-agnostic lowlight palette */
+.hljs-keyword, .hljs-selector-tag, .hljs-literal { color: #c792ea; }
+.hljs-string, .hljs-attr { color: #a3e6b0; }
+.hljs-comment { color: #8b8f9c; font-style: italic; }
+.hljs-number { color: #f2b880; }
+.hljs-title, .hljs-function { color: #7fb8f0; }
+
+/* Anchored comment highlights - resolved via Yjs RelativePosition, not
+   character offsets, so these stay put under concurrent edits. */
+.quill-comment-mark {
+  background: #FCEFD1;
+  border-bottom: 2px solid #E3A008;
+  cursor: pointer;
+}
+.quill-comment-mark--resolved {
+  background: transparent;
+  border-bottom: 2px solid theme("colors.ink.200");
+}
+.quill-comment-mark--active {
+  background: #FADFA0;
 }

@@ -1,11 +1,22 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { LayoutGrid, LogOut } from "lucide-react";
 import { signOut } from "next-auth/react";
 import type { WorkspaceSummary } from "@/types";
+import { DocumentTree } from "./DocumentTree";
+import { WorkspaceSearch } from "./WorkspaceSearch";
+import { NotificationsBell } from "./NotificationsBell";
+
+interface DocSummary {
+  id: string;
+  title: string;
+  parentId: string | null;
+  role: string;
+}
 
 export function WorkspaceSidebar({
   workspaces,
@@ -15,6 +26,26 @@ export function WorkspaceSidebar({
   userName: string;
 }) {
   const pathname = usePathname();
+  const activeWorkspace = workspaces.find((ws) => pathname?.includes(`/workspaces/${ws.id}`));
+  const [docs, setDocs] = useState<DocSummary[]>([]);
+
+  useEffect(() => {
+    if (!activeWorkspace) {
+      setDocs([]);
+      return;
+    }
+    let cancelled = false;
+    void fetch(`/api/workspaces/${activeWorkspace.id}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data) setDocs(data.documents);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeWorkspace?.id]);
+
+  const roots = docs.filter((d) => !d.parentId);
 
   return (
     <aside className="flex h-screen w-64 shrink-0 flex-col border-r border-ink-100 bg-ink-50/60">
@@ -25,7 +56,7 @@ export function WorkspaceSidebar({
         <span className="font-medium text-ink-900">Quill</span>
       </div>
 
-      <nav className="flex-1 space-y-1 px-3">
+      <nav className="space-y-1 px-3">
         {workspaces.map((ws) => {
           const active = pathname?.includes(`/workspaces/${ws.id}`);
           return (
@@ -49,15 +80,39 @@ export function WorkspaceSidebar({
         })}
       </nav>
 
+      <AnimatePresence>
+        {activeWorkspace && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="mt-3 flex flex-1 flex-col gap-3 overflow-hidden"
+          >
+            <WorkspaceSearch workspaceId={activeWorkspace.id} />
+            <div className="flex-1 overflow-y-auto px-3">
+              <p className="mb-1 px-2 text-[11px] font-medium uppercase tracking-wide text-ink-400">
+                Pages
+              </p>
+              <DocumentTree roots={roots.map((r) => ({ id: r.id, title: r.title, role: r.role }))} />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {!activeWorkspace && <div className="flex-1" />}
+
       <div className="flex items-center justify-between border-t border-ink-100 px-4 py-3">
         <span className="truncate text-xs text-ink-500">{userName}</span>
-        <button
-          onClick={() => signOut({ callbackUrl: "/login" })}
-          aria-label="Sign out"
-          className="rounded-md p-1.5 text-ink-400 hover:bg-white hover:text-ink-800"
-        >
-          <LogOut className="h-4 w-4" />
-        </button>
+        <div className="flex items-center gap-1">
+          <NotificationsBell />
+          <button
+            onClick={() => signOut({ callbackUrl: "/login" })}
+            aria-label="Sign out"
+            className="rounded-md p-1.5 text-ink-400 hover:bg-white hover:text-ink-800"
+          >
+            <LogOut className="h-4 w-4" />
+          </button>
+        </div>
       </div>
     </aside>
   );

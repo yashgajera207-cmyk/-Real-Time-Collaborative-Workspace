@@ -1,7 +1,7 @@
 "use client";
 
 import * as Y from "yjs";
-import { Awareness, applyAwarenessUpdate, encodeAwarenessUpdate, removeAwarenessStates } from "y-protocols/awareness";
+import { Awareness, applyAwarenessUpdate, encodeAwarenessUpdate } from "y-protocols/awareness";
 import { IndexeddbPersistence } from "y-indexeddb";
 import type { ConnectionState } from "@/types";
 import { MSG_SYNC_STEP, MSG_UPDATE, MSG_AWARENESS, encodeMessage, decodeMessage } from "./sync-protocol";
@@ -193,15 +193,6 @@ export class QuillWebsocketProvider {
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
-
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      try {
-        removeAwarenessStates(this.awareness, [this.doc.clientID], "destroy");
-        const update = encodeAwarenessUpdate(this.awareness, [this.doc.clientID]);
-        this.ws.send(encodeMessage(MSG_AWARENESS, update));
-      } catch {}
-    }
-
     this.doc.off("update", this.handleLocalDocUpdate);
     this.awareness.off("update", this.handleLocalAwarenessUpdate);
     if (typeof window !== "undefined") {

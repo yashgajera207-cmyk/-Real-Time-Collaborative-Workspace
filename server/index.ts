@@ -16,7 +16,7 @@ import {
   type RoomMember,
   type Room,
 } from "./rooms";
-import { appendUpdate } from "./persistence";
+import { appendUpdate, updateSearchText, createSnapshot } from "./persistence";
 import { MSG_SYNC_STEP, MSG_UPDATE, MSG_AWARENESS, encodeMessage, decodeMessage } from "./protocol";
 
 // Next.js route handlers cannot hold a persistent, long-lived, full-duplex
@@ -157,14 +157,35 @@ async function handleMessage(
       Y.applyUpdate(room.doc, payload);
       await appendUpdate(documentId, member.userId, payload);
       broadcast(documentId, encodeMessage(MSG_UPDATE, payload), member.socket);
+
+      // "Periodic": a search-index refresh every few edits, and a full
+      // snapshot every 50, both amortised so a fast typist isn't
+      // triggering a DB write per keystroke. Fire-and-forget - these are
+      // best-effort background maintenance, not part of the durability
+      // guarantee (that's appendUpdate above, which already happened).
+      room.updatesSinceIndex += 1;
+      room.updatesSinceSnapshot += 1;
+      if (room.updatesSinceIndex >= 5) {
+        room.updatesSinceIndex = 0;
+        void updateSearchText(documentId, room.doc).catch((err) =>
+          app.log.error({ err, documentId }, "search index refresh failed")
+        );
+      }
+      if (room.updatesSinceSnapshot >= 50) {
+        room.updatesSinceSnapshot = 0;
+        void createSnapshot(documentId, room.doc, { label: "Autosave" }).catch((err) =>
+          app.log.error({ err, documentId }, "periodic snapshot failed")
+        );
+      }
       return;
     }
 
     case MSG_AWARENESS: {
       // Presence isn't gated by edit rights - a viewer can still show a
       // cursor and be seen by everyone else with access to the document.
-      applyAwarenessUpdate(room.awareness, payload, member.socket);
+      applyAwarenessUpdate(room.awareness, payload, member);
       trackOwnedClientIds(room, member, payload);
+      broadcast(documentId, encodeMessage(MSG_AWARENESS, payload), member.socket);
       return;
     }
 
@@ -213,12 +234,7 @@ setInterval(() => {
   }
 }, HEARTBEAT_INTERVAL_MS);
 
-app
-  .listen({ port: PORT, host: "0.0.0.0" })
-  .then(() => {
-    console.log(`WebSocket server listening on ws://localhost:${PORT}`);
-  })
-  .catch((err) => {
-    console.error("WebSocket server error:", err);
-    process.exit(1);
-  });
+app.listen({ port: PORT, host: "0.0.0.0" }).catch((err) => {
+  app.log.error(err);
+  process.exit(1);
+});

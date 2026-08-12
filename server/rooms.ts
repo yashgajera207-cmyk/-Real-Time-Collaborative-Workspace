@@ -1,9 +1,8 @@
 import * as Y from "yjs";
-import { Awareness, encodeAwarenessUpdate, removeAwarenessStates } from "y-protocols/awareness";
+import { Awareness, removeAwarenessStates } from "y-protocols/awareness";
 import type { WebSocket } from "ws";
 import type { DocumentRole } from "@prisma/client";
 import { loadDocument } from "./persistence";
-import { MSG_AWARENESS, encodeMessage } from "./protocol";
 
 export interface RoomMember {
   socket: WebSocket;
@@ -22,6 +21,10 @@ export interface Room {
   awareness: Awareness;
   members: Set<RoomMember>;
   loading: Promise<void>;
+  // Counts applied edits since the last snapshot / search-index refresh,
+  // so both can run "periodically" without a DB write on every keystroke.
+  updatesSinceSnapshot: number;
+  updatesSinceIndex: number;
 }
 
 // One room per open document, held for the lifetime of the process.
@@ -41,26 +44,14 @@ export async function getOrCreateRoom(documentId: string): Promise<Room> {
   // Awareness is intentionally never persisted - it's ephemeral presence
   // state (cursors, selections, "who's online"), not document content.
   const awareness = new Awareness(doc);
-  awareness.on(
-    "update",
-    (
-      { added, updated, removed }: { added: number[]; updated: number[]; removed: number[] },
-      origin: unknown
-    ) => {
-      const changedClients = [...added, ...updated, ...removed];
-      if (changedClients.length === 0) return;
-      const update = encodeAwarenessUpdate(awareness, changedClients);
-      const msg = encodeMessage(MSG_AWARENESS, update);
-      const roomMembers = rooms.get(documentId)?.members;
-      if (!roomMembers) return;
-      for (const m of roomMembers) {
-        if (m.socket === origin) continue;
-        if (m.socket.readyState !== 1 /* OPEN */) continue;
-        m.socket.send(msg);
-      }
-    }
-  );
-  const placeholder: Room = { doc, awareness, members: new Set(), loading: Promise.resolve() };
+  const placeholder: Room = {
+    doc,
+    awareness,
+    members: new Set(),
+    loading: Promise.resolve(),
+    updatesSinceSnapshot: 0,
+    updatesSinceIndex: 0,
+  };
   rooms.set(documentId, placeholder);
 
   placeholder.loading = (async () => {
@@ -74,20 +65,6 @@ export async function getOrCreateRoom(documentId: string): Promise<Room> {
 
 export function addMember(documentId: string, member: RoomMember): void {
   rooms.get(documentId)?.members.add(member);
-}
-
-export function cleanupStaleAwareness(documentId: string): void {
-  const room = rooms.get(documentId);
-  if (!room) return;
-  const activeClientIds = new Set<number>();
-  for (const m of room.members) {
-    for (const id of m.clientIds) activeClientIds.add(id);
-  }
-  const allAwarenessIds = [...room.awareness.getStates().keys()];
-  const staleIds = allAwarenessIds.filter((id) => !activeClientIds.has(id));
-  if (staleIds.length > 0) {
-    removeAwarenessStates(room.awareness, staleIds, "stale cleanup");
-  }
 }
 
 /**
@@ -104,7 +81,6 @@ export function removeMember(documentId: string, member: RoomMember): void {
   if (member.clientIds.size > 0) {
     removeAwarenessStates(room.awareness, [...member.clientIds], "connection closed");
   }
-  cleanupStaleAwareness(documentId);
 }
 
 export function roomSize(documentId: string): number {

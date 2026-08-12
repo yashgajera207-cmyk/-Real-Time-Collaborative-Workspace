@@ -37,6 +37,7 @@ export async function GET(
     documents: documents.map((d: (typeof documents)[number]) => ({
       id: d.id,
       title: d.title,
+      parentId: d.parentId,
       updatedAt: d.updatedAt,
       role: d.acl[0]?.role,
     })),

@@ -25,6 +25,12 @@ model User {
   documentAcls  DocumentAcl[]
   documentsMade Document[]     @relation("DocumentCreatedBy")
   updatesWritten DocumentUpdate[]
+  snapshotsMade  DocumentSnapshot[]
+  commentThreadsStarted CommentThread[]
+  comments       Comment[]
+  mentionedIn    CommentMention[]
+  notificationsReceived Notification[] @relation("NotificationRecipient")
+  notificationsCaused   Notification[] @relation("NotificationActor")
 }
 
 model Workspace {
@@ -66,11 +72,25 @@ model Document {
   createdById String
   createdBy   User      @relation("DocumentCreatedBy", fields: [createdById], references: [id])
 
+  // Nested pages: a document may live under another document. `position`
+  // orders siblings for drag-to-reparent.
+  parentId    String?
+  parent      Document?  @relation("DocumentTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children    Document[] @relation("DocumentTree")
+  position    Int        @default(0)
+
+  // Plain-text mirror of the Yjs content, refreshed by the WS server after
+  // updates are persisted (tags stripped from the Yjs XmlFragment's
+  // string form). Powers workspace search without a second sync channel.
+  searchText  String   @default("")
+
   acl         DocumentAcl[]
   updates     DocumentUpdate[]
   snapshots   DocumentSnapshot[]
+  commentThreads CommentThread[]
 
   @@index([workspaceId])
+  @@index([parentId])
 }
 
 // Per-document access control. Explicit rows override the implicit
@@ -106,15 +126,101 @@ model DocumentUpdate {
   @@index([documentId, id])
 }
 
-// Periodic compacted state (phase 4 will truncate the update log against
-// this). In phase 1 this exists in the schema but is not yet populated.
+// Periodic compacted state. Populated two ways: automatically by the WS
+// server every N applied updates ("periodic snapshots"), and on demand
+// when a user names a version from the history panel. Phase 4's log
+// compaction will truncate DocumentUpdate against the most recent of
+// these; for now both the full update log and every snapshot are kept
+// forever, which is exactly what makes "restore doesn't destroy history"
+// true.
 model DocumentSnapshot {
-  id         String   @id @default(cuid())
-  data       Bytes
-  createdAt  DateTime @default(now())
+  id          String   @id @default(cuid())
+  data        Bytes
+  label       String?
+  createdAt   DateTime @default(now())
 
-  documentId String
-  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  documentId  String
+  document    Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  createdById String?
+  createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
 
   @@index([documentId, createdAt])
+}
+
+// One thread per commented range. The anchor is a Yjs RelativePosition
+// (encoded, from y-prosemirror's absolutePositionToRelativePosition) for
+// each end of the original selection, NOT a character offset - offsets
+// are exactly what the spec calls out as "the obvious approach and
+// they're wrong under concurrency". Re-resolving to an absolute range on
+// every render is what makes the anchor survive concurrent edits, and
+// what lets us detect an orphaned thread (both ends resolve to null once
+// the commented text itself has been deleted).
+model CommentThread {
+  id              String   @id @default(cuid())
+  anchorStart     Bytes
+  anchorEnd       Bytes
+  quotedText      String   // snapshot of the selection at creation time, shown if orphaned
+  resolved        Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  documentId      String
+  document        Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  createdById     String
+  createdBy       User     @relation(fields: [createdById], references: [id])
+
+  comments        Comment[]
+
+  @@index([documentId, resolved])
+}
+
+model Comment {
+  id              String   @id @default(cuid())
+  body            String
+  createdAt       DateTime @default(now())
+
+  threadId        String
+  thread          CommentThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  authorId        String
+  author          User     @relation(fields: [authorId], references: [id])
+
+  mentions        CommentMention[]
+
+  @@index([threadId])
+}
+
+model CommentMention {
+  id            String  @id @default(cuid())
+  commentId     String
+  comment       Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  mentionedUserId String
+  mentionedUser User    @relation(fields: [mentionedUserId], references: [id], onDelete: Cascade)
+
+  @@unique([commentId, mentionedUserId])
+}
+
+enum NotificationType {
+  mention
+  comment_reply
+}
+
+model Notification {
+  id          String   @id @default(cuid())
+  type        NotificationType
+  message     String
+  read        Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  userId      String
+  user        User     @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
+
+  actorId     String
+  actor       User     @relation("NotificationActor", fields: [actorId], references: [id], onDelete: Cascade)
+
+  documentId  String
+  threadId    String?
+
+  @@index([userId, read])
 }

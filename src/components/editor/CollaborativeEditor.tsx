@@ -5,18 +5,37 @@ import StarterKit from "@tiptap/starter-kit";
 import Collaboration from "@tiptap/extension-collaboration";
 import CollaborationCursor from "@tiptap/extension-collaboration-cursor";
 import Placeholder from "@tiptap/extension-placeholder";
+import Link from "@tiptap/extension-link";
+import Image from "@tiptap/extension-image";
+import Underline from "@tiptap/extension-underline";
+import TaskList from "@tiptap/extension-task-list";
+import TaskItem from "@tiptap/extension-task-item";
+import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
+import { createLowlight, common } from "lowlight";
 import { useEffect, useMemo, useState } from "react";
 import * as Y from "yjs";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
+import { MessageSquare, History } from "lucide-react";
 import { QuillWebsocketProvider } from "@/lib/yjs-provider";
 import { colorForUser, usePresence } from "@/lib/presence";
+import { useComments } from "@/lib/use-comments";
+import { useWorkspaceMembers } from "@/lib/use-workspace-members";
+import { resolveAnchor } from "@/lib/comment-anchor";
 import { EditorToolbar } from "./EditorToolbar";
 import { ConnectionStatus } from "./ConnectionStatus";
 import { PresenceAvatarStack } from "./PresenceAvatarStack";
+import { CommentHighlight, type AnchoredThread } from "./CommentHighlightExtension";
+import { CommentsSidebar } from "./CommentsSidebar";
+import { NewCommentBubble } from "./NewCommentBubble";
+import { VersionHistoryPanel } from "./VersionHistoryPanel";
+import { SlashCommand } from "./SlashCommand";
 import type { ConnectionState, DocumentRole } from "@/types";
+
+const lowlight = createLowlight(common);
 
 interface CollaborativeEditorProps {
   documentId: string;
+  workspaceId: string;
   role: DocumentRole;
   userId: string;
   userName: string;
@@ -31,15 +50,18 @@ async function fetchToken(documentId: string): Promise<string> {
   return data.token;
 }
 
-export function CollaborativeEditor({ documentId, role, userId, userName }: CollaborativeEditorProps) {
+export function CollaborativeEditor({ documentId, workspaceId, role, userId, userName }: CollaborativeEditorProps) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
     setMounted(true);
   }, []);
 
   const editable = role === "editor" || role === "owner";
+  const canComment = editable || role === "commenter";
   const [status, setStatus] = useState<ConnectionState>("connecting");
   const [lastDeltaBytes, setLastDeltaBytes] = useState<number | null>(null);
+  const [panel, setPanel] = useState<"none" | "comments" | "history">("none");
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
 
   const ydoc = useMemo(() => {
     if (!mounted) return null;
@@ -52,6 +74,8 @@ export function CollaborativeEditor({ documentId, role, userId, userName }: Coll
   }, [ydoc]);
 
   const color = useMemo(() => colorForUser(userId), [userId]);
+  const members = useWorkspaceMembers(workspaceId);
+  const { threads, createThread, reply, setResolved } = useComments(documentId);
 
   const provider = useMemo(() => {
     if (!ydoc || !mounted) return null;
@@ -74,37 +98,35 @@ export function CollaborativeEditor({ documentId, role, userId, userName }: Coll
 
   const presence = usePresence(provider?.awareness);
 
+  const anchoredThreads: AnchoredThread[] = useMemo(
+    () => threads.map((t) => ({ id: t.id, anchorStart: t.anchorStart, anchorEnd: t.anchorEnd, resolved: t.resolved })),
+    [threads]
+  );
+
   const editor = useEditor(
     {
       immediatelyRender: false,
       editable,
       extensions: [
-        StarterKit.configure({ history: false }), // Yjs owns undo history
+        StarterKit.configure({ history: false, codeBlock: false }), // Yjs owns undo history; codeBlock replaced below
         ...(fragment ? [Collaboration.configure({ fragment })] : []),
-        ...(provider
-          ? [
-              CollaborationCursor.configure({
-                provider,
-                user: { name: userName, color },
-                render: (user) => {
-                  const cursor = document.createElement("span");
-                  cursor.classList.add("collaboration-cursor__caret");
-                  cursor.setAttribute("style", `border-color: ${user.color}`);
-
-                  const label = document.createElement("div");
-                  label.classList.add("collaboration-cursor__label");
-                  label.setAttribute("style", `background-color: ${user.color}`);
-                  label.insertBefore(document.createTextNode(user.name), null);
-
-                  const space = document.createTextNode("\u2060");
-                  cursor.insertBefore(space, null);
-                  cursor.insertBefore(label, null);
-                  return cursor;
-                },
-              }),
-            ]
-          : []),
-        Placeholder.configure({ placeholder: "Start writing..." }),
+        ...(provider ? [CollaborationCursor.configure({ provider, user: { name: userName, color } })] : []),
+        Placeholder.configure({ placeholder: "Start writing, or type '/' for commands..." }),
+        Underline,
+        Link.configure({ openOnClick: false, autolink: true }),
+        Image,
+        TaskList,
+        TaskItem.configure({ nested: true }),
+        CodeBlockLowlight.configure({ lowlight }),
+        SlashCommand,
+        CommentHighlight.configure({
+          getThreads: () => anchoredThreads,
+          activeThreadId,
+          onThreadClick: (threadId) => {
+            setActiveThreadId(threadId);
+            setPanel("comments");
+          },
+        }),
       ],
       editorProps: {
         attributes: {
@@ -113,27 +135,115 @@ export function CollaborativeEditor({ documentId, role, userId, userName }: Coll
         },
       },
     },
-    [fragment, editable, provider]
+    [fragment, editable, provider, anchoredThreads, activeThreadId]
   );
 
-  if (!mounted || !provider) {
+  // Threads whose anchor no longer resolves to a live range - shown in
+  // the sidebar as orphaned instead of highlighted in the document.
+  const orphanedThreadIds = useMemo(() => {
+    if (!editor) return new Set<string>();
+    const orphaned = new Set<string>();
+    for (const thread of threads) {
+      if (!thread.resolved && resolveAnchor(editor, thread.anchorStart, thread.anchorEnd) === null) {
+        orphaned.add(thread.id);
+      }
+    }
+    return orphaned;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editor, threads, editor?.state.doc]);
+
+  useEffect(() => {
+    if (editor && !editor.isDestroyed) {
+      editor.view.dispatch(editor.view.state.tr);
+    }
+  }, [editor, threads]);
+
+  if (!mounted || !provider || !fragment) {
     return <div className="flex h-full flex-col bg-white" />;
   }
 
+  const handleCreateThread = async (params: {
+    anchorStart: string;
+    anchorEnd: string;
+    quotedText: string;
+    body: string;
+    mentionedUserIds: string[];
+  }) => {
+    const created = await createThread(params);
+    if (created) {
+      setPanel("comments");
+      setActiveThreadId(created.id);
+    }
+    return created;
+  };
+
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b border-ink-100 bg-white px-4 py-2">
-        <EditorToolbar editor={editor} editable={editable} />
-        <div className="flex items-center gap-3">
-          <PresenceAvatarStack entries={presence} />
-          <motion.div layout>
-            <ConnectionStatus state={status} lastDeltaBytes={lastDeltaBytes} />
-          </motion.div>
+    <div className="flex h-full">
+      <div className="flex h-full flex-1 flex-col">
+        <div className="flex items-center justify-between border-b border-ink-100 bg-white px-4 py-2">
+          <EditorToolbar editor={editor} editable={editable} />
+          <div className="flex items-center gap-2">
+            <PresenceAvatarStack entries={presence} />
+            <motion.div layout>
+              <ConnectionStatus state={status} lastDeltaBytes={lastDeltaBytes} />
+            </motion.div>
+            <button
+              onClick={() => setPanel(panel === "comments" ? "none" : "comments")}
+              className={`flex h-8 items-center gap-1.5 rounded-md px-2 text-xs font-medium transition-colors
+                ${panel === "comments" ? "bg-ink-900 text-white" : "text-ink-600 hover:bg-ink-50"}`}
+            >
+              <MessageSquare className="h-3.5 w-3.5" />
+              {threads.filter((t) => !t.resolved).length || ""}
+            </button>
+            <button
+              onClick={() => setPanel(panel === "history" ? "none" : "history")}
+              className={`flex h-8 items-center gap-1.5 rounded-md px-2 text-xs font-medium transition-colors
+                ${panel === "history" ? "bg-ink-900 text-white" : "text-ink-600 hover:bg-ink-50"}`}
+            >
+              <History className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+
+        <div className="relative flex-1 overflow-y-auto bg-white">
+          <EditorContent editor={editor} />
+          {canComment && (
+            <NewCommentBubble editor={editor} members={members} onCreateThread={handleCreateThread} />
+          )}
         </div>
       </div>
-      <div className="flex-1 overflow-y-auto bg-white">
-        <EditorContent editor={editor} />
-      </div>
+
+      <AnimatePresence>
+        {panel === "comments" && (
+          <motion.div
+            initial={{ x: 320, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: 320, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="h-full w-80 shrink-0 border-l border-ink-100 bg-white"
+          >
+            <CommentsSidebar
+              threads={threads}
+              orphanedThreadIds={orphanedThreadIds}
+              activeThreadId={activeThreadId}
+              onSelectThread={setActiveThreadId}
+              onReply={reply}
+              onSetResolved={setResolved}
+              members={members}
+              canComment={canComment}
+            />
+          </motion.div>
+        )}
+        {panel === "history" && (
+          <VersionHistoryPanel
+            documentId={documentId}
+            liveDoc={ydoc!}
+            editor={editor}
+            canEdit={editable}
+            onClose={() => setPanel("none")}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

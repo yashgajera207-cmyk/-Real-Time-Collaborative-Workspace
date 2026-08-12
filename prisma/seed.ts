@@ -58,7 +58,29 @@ async function main() {
     });
   }
 
+  // A nested child page, to demo breadcrumbs and the sidebar tree without
+  // needing to create one by hand first.
+  const childDoc = await prisma.document.upsert({
+    where: { id: "seed-doc-quill-spec-child" },
+    update: {},
+    create: {
+      id: "seed-doc-quill-spec-child",
+      title: "Formatting cheatsheet",
+      workspaceId: workspace.id,
+      parentId: document.id,
+      createdById: owner.user.id,
+    },
+  });
+  for (const u of users) {
+    await prisma.documentAcl.upsert({
+      where: { documentId_userId: { documentId: childDoc.id, userId: u.user.id } },
+      update: { role: u.role },
+      create: { documentId: childDoc.id, userId: u.user.id, role: u.role },
+    });
+  }
+
   console.log("Seeded workspace 'demo' with document:", document.id);
+  console.log("  and a nested child page:", childDoc.id);
   console.log("Demo accounts (password: password123):");
   for (const u of DEMO_USERS) console.log(`  ${u.role.padEnd(10)} ${u.email}`);
 }
