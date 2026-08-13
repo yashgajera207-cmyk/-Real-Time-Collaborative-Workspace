@@ -195,7 +195,7 @@ export class QuillWebsocketProvider {
         for (let i = 0; i < binaryString.length; i++) {
           bytes[i] = binaryString.charCodeAt(i);
         }
-        Y.applyUpdate(this.doc, bytes, this);
+        Y.applyUpdate(this.doc, bytes, "remote");
         this.emitSyncStats({ deltaBytes: bytes.byteLength, direction: "received" });
       }
 
@@ -208,7 +208,7 @@ export class QuillWebsocketProvider {
             for (let i = 0; i < binaryString.length; i++) {
               bytes[i] = binaryString.charCodeAt(i);
             }
-            applyAwarenessUpdate(this.awareness, bytes, this);
+            applyAwarenessUpdate(this.awareness, bytes, "remote");
           }
         }
       }
