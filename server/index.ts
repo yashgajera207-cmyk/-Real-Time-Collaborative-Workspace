@@ -32,7 +32,7 @@ import { MSG_SYNC_STEP, MSG_UPDATE, MSG_AWARENESS, encodeMessage, decodeMessage 
 // sockets for the room's entire lifetime. That's a plain Node process,
 // not a route handler.
 
-const PORT = Number(process.env.WS_PORT ?? 1234);
+const PORT = Number(process.env.PORT ?? process.env.WS_PORT ?? 1234);
 const HEARTBEAT_INTERVAL_MS = 10_000;
 const IDLE_ROOM_EVICTION_MS = Number(process.env.IDLE_ROOM_EVICTION_MS ?? 5 * 60_000);
 const IDLE_SWEEP_INTERVAL_MS = 60_000;
