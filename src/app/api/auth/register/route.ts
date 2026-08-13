@@ -4,6 +4,8 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { DocumentRole } from "@prisma/client";
 
+export const dynamic = "force-dynamic";
+
 function slugify(name: string) {
   const base = name
     .toLowerCase()
