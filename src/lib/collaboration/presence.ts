@@ -36,11 +36,18 @@ export function usePresence(awareness: Awareness | undefined): PresenceEntry[] {
     const sync = () => {
       const localId = awareness.doc.clientID;
       const list: PresenceEntry[] = [];
+      const seenUserKeys = new Set<string>();
+
       awareness.getStates().forEach((state, clientId) => {
         const user = (state as { user?: { name?: string; color?: string }; userId?: string })
           .user;
-        const userId = (state as { userId?: string }).userId;
-        if (!user?.name) return;
+        const userId = (state as { userId?: string }).userId || user?.name;
+        if (!user?.name || !userId) return;
+
+        // Deduplicate so each unique person appears exactly once in the avatar stack
+        if (seenUserKeys.has(userId)) return;
+        seenUserKeys.add(userId);
+
         list.push({
           clientId,
           userId,
