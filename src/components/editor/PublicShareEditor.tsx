@@ -26,7 +26,7 @@ import { FileText, Eye } from "lucide-react";
 
 const lowlight = createLowlight(common);
 
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "wss://ws-server-production-72c6.up.railway.app";
+const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "wss://quill-ws-live.up.railway.app";
 
 interface PublicShareEditorProps {
   documentId: string;
