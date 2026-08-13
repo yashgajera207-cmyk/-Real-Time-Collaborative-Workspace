@@ -65,13 +65,42 @@ export async function authenticateConnection(
     return { userId: `guest:${payload.shareToken.slice(0, 8)}`, role: DocumentRole.viewer, isShareLink: true };
   }
 
+  const role = await resolveDocumentRole(payload.sub, payload.documentId);
+  if (!role) throw new AuthError("no access to this document");
+
+  return { userId: payload.sub, role, isShareLink: false };
+}
+
+async function resolveDocumentRole(
+  userId: string,
+  documentId: string
+): Promise<DocumentRole | null> {
   const acl = await prisma.documentAcl.findUnique({
-    where: { documentId_userId: { documentId: payload.documentId, userId: payload.sub } },
+    where: { documentId_userId: { documentId, userId } },
     select: { role: true },
   });
-  if (!acl) throw new AuthError("no access to this document");
 
-  return { userId: payload.sub, role: acl.role, isShareLink: false };
+  if (acl?.role === DocumentRole.owner) return DocumentRole.owner;
+
+  const doc = await prisma.document.findUnique({
+    where: { id: documentId },
+    select: { createdById: true, workspaceId: true },
+  });
+
+  if (!doc) return null;
+
+  if (doc.createdById === userId) return DocumentRole.owner;
+
+  const wsMembership = await prisma.membership.findUnique({
+    where: { userId_workspaceId: { userId, workspaceId: doc.workspaceId } },
+    select: { role: true },
+  });
+  if (wsMembership?.role === DocumentRole.owner) return DocumentRole.owner;
+  if (wsMembership?.role) return wsMembership.role;
+
+  if (acl?.role) return acl.role;
+
+  return null;
 }
 
 export { prisma };
