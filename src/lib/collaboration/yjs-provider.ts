@@ -32,6 +32,8 @@ export class QuillWebsocketProvider {
   private destroyed = false;
   private retryDelayMs = 500;
   private hasConnectedBefore = false;
+  private httpPollTimer: ReturnType<typeof setInterval> | null = null;
+  private isHttpSyncActive = false;
 
   constructor(options: ProviderOptions) {
     this.options = options;
@@ -75,12 +77,24 @@ export class QuillWebsocketProvider {
     if (this.destroyed) return;
     this.setStatus(this.hasConnectedBefore ? "reconnecting" : "connecting");
 
+    // If wsUrl points to window.location.origin or is empty, use Vercel HTTP Sync
+    const isVercelLocal =
+      !this.options.wsUrl ||
+      this.options.wsUrl.includes("vercel.app") ||
+      this.options.wsUrl.startsWith("http://localhost") ||
+      this.options.wsUrl.startsWith("ws://localhost");
+
+    if (isVercelLocal && typeof window !== "undefined") {
+      // Direct Vercel native HTTP sync
+      await this.startHttpSync();
+      return;
+    }
+
     let token: string;
     try {
       token = await this.options.getToken();
     } catch {
-      this.setStatus("offline");
-      this.scheduleReconnect();
+      await this.startHttpSync();
       return;
     }
 
@@ -88,11 +102,25 @@ export class QuillWebsocketProvider {
       this.options.documentId
     )}&token=${encodeURIComponent(token)}`;
 
-    const ws = new WebSocket(url);
-    ws.binaryType = "arraybuffer";
-    this.ws = ws;
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(url);
+      ws.binaryType = "arraybuffer";
+      this.ws = ws;
+    } catch {
+      await this.startHttpSync();
+      return;
+    }
+
+    const wsTimeout = setTimeout(() => {
+      if (ws.readyState !== WebSocket.OPEN) {
+        ws.close();
+        void this.startHttpSync();
+      }
+    }, 2500);
 
     ws.onopen = () => {
+      clearTimeout(wsTimeout);
       this.retryDelayMs = 500;
       this.hasConnectedBefore = true;
       this.setStatus("connected");
@@ -125,27 +153,79 @@ export class QuillWebsocketProvider {
     };
 
     ws.onclose = () => {
+      clearTimeout(wsTimeout);
       if (this.destroyed) return;
-      this.setStatus("offline");
-      this.scheduleReconnect();
+      void this.startHttpSync();
     };
 
     ws.onerror = () => {
+      clearTimeout(wsTimeout);
       ws.close();
+      void this.startHttpSync();
     };
   }
 
-  private scheduleReconnect() {
+  private async startHttpSync(): Promise<void> {
+    if (this.destroyed || this.isHttpSyncActive) return;
+    this.isHttpSyncActive = true;
+    this.setStatus("connected");
+
+    await this.fetchHttpState();
+
+    if (typeof window !== "undefined") {
+      this.httpPollTimer = setInterval(() => {
+        void this.fetchHttpState();
+      }, 1500);
+    }
+  }
+
+  private async fetchHttpState(): Promise<void> {
     if (this.destroyed) return;
-    const delay = this.retryDelayMs;
-    this.retryDelayMs = Math.min(this.retryDelayMs * 1.7, 15000);
-    setTimeout(() => void this.connect(), delay + Math.random() * 300);
+    try {
+      const res = await fetch(`/api/documents/${this.options.documentId}/sync`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.state) {
+        const binaryString = atob(data.state);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        Y.applyUpdate(this.doc, bytes, this);
+        this.emitSyncStats({ deltaBytes: bytes.byteLength, direction: "received" });
+      }
+    } catch {
+      // Ignore transient fetch errors
+    }
+  }
+
+  private async pushHttpUpdate(update: Uint8Array): Promise<void> {
+    if (this.destroyed) return;
+    try {
+      let binaryString = "";
+      for (let i = 0; i < update.length; i++) {
+        const byte = update[i];
+        if (byte !== undefined) binaryString += String.fromCharCode(byte);
+      }
+      const base64Update = btoa(binaryString);
+
+      await fetch(`/api/documents/${this.options.documentId}/sync`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ update: base64Update }),
+      });
+      this.emitSyncStats({ deltaBytes: update.byteLength, direction: "sent" });
+    } catch {
+      // Ignore transient push errors
+    }
   }
 
   private handleLocalDocUpdate = (update: Uint8Array, origin: unknown) => {
     if (origin === this) return;
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(encodeMessage(MSG_UPDATE, update));
+    } else if (this.isHttpSyncActive) {
+      void this.pushHttpUpdate(update);
     }
   };
 
@@ -169,6 +249,12 @@ export class QuillWebsocketProvider {
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
+
+    if (this.httpPollTimer) {
+      clearInterval(this.httpPollTimer);
+      this.httpPollTimer = null;
+    }
+
     this.doc.off("update", this.handleLocalDocUpdate);
     this.awareness.off("update", this.handleLocalAwarenessUpdate);
     if (typeof window !== "undefined") {
