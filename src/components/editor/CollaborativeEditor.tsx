@@ -46,7 +46,7 @@ interface CollaborativeEditorProps {
   userName: string;
 }
 
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "wss://quill-ws-live.up.railway.app";
+const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "wss://ws-server-production-72c6.up.railway.app";
 
 async function fetchToken(documentId: string): Promise<string> {
   const res = await fetch(`/api/documents/${documentId}/token`, { method: "POST" });
