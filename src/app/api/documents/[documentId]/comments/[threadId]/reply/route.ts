@@ -51,7 +51,6 @@ export async function POST(
     actorId: session.user.id,
     actorName,
     threadOwnerId: thread.createdById,
-    commentBody: data.body,
   });
   await notifyMentions({
     documentId,
@@ -59,7 +58,6 @@ export async function POST(
     actorId: session.user.id,
     actorName,
     mentionedUserIds: data.mentionedUserIds,
-    commentBody: data.body,
   });
 
   return NextResponse.json(comment, { status: 201 });

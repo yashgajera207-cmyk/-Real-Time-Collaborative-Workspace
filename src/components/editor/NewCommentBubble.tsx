@@ -29,9 +29,8 @@ export function NewCommentBubble({ editor, members, onCreateThread }: NewComment
     if (!editor) return;
 
     const update = () => {
-      if (open) return;
       const { from, to, empty } = editor.state.selection;
-      if (empty) {
+      if (empty || open) {
         setSelection(null);
         setCoords(null);
         return;
@@ -39,7 +38,7 @@ export function NewCommentBubble({ editor, members, onCreateThread }: NewComment
       const text = editor.state.doc.textBetween(from, to, " ");
       setSelection({ from, to, text });
       const start = editor.view.coordsAtPos(from);
-      setCoords({ top: Math.max(10, start.top - 44), left: Math.max(10, start.left) });
+      setCoords({ top: start.top - 44, left: start.left });
     };
 
     editor.on("selectionUpdate", update);
@@ -68,33 +67,18 @@ export function NewCommentBubble({ editor, members, onCreateThread }: NewComment
           </button>
         ) : (
           <div className="w-72 rounded-xl border border-ink-100 bg-white p-3 shadow-xl">
-            <div className="mb-2 flex items-center justify-between">
-              <p className="line-clamp-2 border-l-2 border-ink-200 pl-2 text-xs italic text-ink-400">
-                "{selection.text}"
-              </p>
-              <button
-                type="button"
-                onClick={() => {
-                  setOpen(false);
-                  setSelection(null);
-                  setCoords(null);
-                }}
-                className="ml-2 text-xs text-ink-400 hover:text-ink-700"
-              >
-                Cancel
-              </button>
-            </div>
+            <p className="mb-2 line-clamp-2 border-l-2 border-ink-200 pl-2 text-xs italic text-ink-400">
+              "{selection.text}"
+            </p>
             <MentionComposer
               members={members}
               submitLabel="Comment"
               autoFocus
               onSubmit={async (body, mentionedUserIds) => {
-                if (!selection) return;
                 const anchor = encodeSelectionAnchor(editor, selection.from, selection.to);
                 await onCreateThread({ ...anchor, quotedText: selection.text, body, mentionedUserIds });
                 setOpen(false);
                 setSelection(null);
-                setCoords(null);
               }}
             />
           </div>

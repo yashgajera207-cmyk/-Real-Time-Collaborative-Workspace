@@ -31,6 +31,7 @@ model User {
   mentionedIn    CommentMention[]
   notificationsReceived Notification[] @relation("NotificationRecipient")
   notificationsCaused   Notification[] @relation("NotificationActor")
+  shareLinksCreated     ShareLink[]
 }
 
 model Workspace {
@@ -70,7 +71,7 @@ model Document {
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   createdById String
-  createdBy   User      @relation("DocumentCreatedBy", fields: [createdById], references: [id])
+  createdBy   User      @relation("DocumentCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
 
   // Nested pages: a document may live under another document. `position`
   // orders siblings for drag-to-reparent.
@@ -88,6 +89,7 @@ model Document {
   updates     DocumentUpdate[]
   snapshots   DocumentSnapshot[]
   commentThreads CommentThread[]
+  shareLinks  ShareLink[]
 
   @@index([workspaceId])
   @@index([parentId])
@@ -126,18 +128,23 @@ model DocumentUpdate {
   @@index([documentId, id])
 }
 
-// Periodic compacted state. Populated two ways: automatically by the WS
-// server every N applied updates ("periodic snapshots"), and on demand
-// when a user names a version from the history panel. Phase 4's log
-// compaction will truncate DocumentUpdate against the most recent of
-// these; for now both the full update log and every snapshot are kept
-// forever, which is exactly what makes "restore doesn't destroy history"
-// true.
+// Periodic compacted state. Serves two purposes distinguished by
+// `compactedThroughId`:
+//   - null:      a user-facing named version (phase 3 history panel).
+//                Kept forever; `data` is a full encoded state, so
+//                restoring from it never depends on the update log.
+//   - non-null:  an internal compaction checkpoint (phase 4). Marks that
+//                every DocumentUpdate row up to and including that id is
+//                summarized in `data` and has been deleted. Reconstruction
+//                starts from the latest checkpoint instead of replaying
+//                from empty, which is what keeps cold-load time bounded
+//                as the log would otherwise grow forever.
 model DocumentSnapshot {
-  id          String   @id @default(cuid())
-  data        Bytes
-  label       String?
-  createdAt   DateTime @default(now())
+  id                  String   @id @default(cuid())
+  data                Bytes
+  label               String?
+  compactedThroughId  BigInt?
+  createdAt           DateTime @default(now())
 
   documentId  String
   document    Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
@@ -146,6 +153,7 @@ model DocumentSnapshot {
   createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
 
   @@index([documentId, createdAt])
+  @@index([documentId, compactedThroughId])
 }
 
 // One thread per commented range. The anchor is a Yjs RelativePosition
@@ -168,7 +176,7 @@ model CommentThread {
   document        Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
 
   createdById     String
-  createdBy       User     @relation(fields: [createdById], references: [id])
+  createdBy       User     @relation(fields: [createdById], references: [id], onDelete: Cascade)
 
   comments        Comment[]
 
@@ -184,7 +192,7 @@ model Comment {
   thread          CommentThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
 
   authorId        String
-  author          User     @relation(fields: [authorId], references: [id])
+  author          User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
 
   mentions        CommentMention[]
 
@@ -223,4 +231,25 @@ model Notification {
   threadId    String?
 
   @@index([userId, read])
+}
+
+// A revocable, optionally password-protected read-only link. Anyone
+// holding the token gets viewer access to exactly this document, without
+// being a workspace member or having a DocumentAcl row - the token
+// itself is the grant, scoped narrowly (one document, viewer only,
+// revocable at any time) rather than a general-purpose credential.
+model ShareLink {
+  id            String    @id @default(cuid())
+  token         String    @unique @default(cuid())
+  passwordHash  String?
+  revoked       Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+
+  documentId    String
+  document      Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  createdById   String
+  createdBy     User      @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([documentId])
 }

@@ -1,12 +1,6 @@
 import jwt from "jsonwebtoken";
 import { PrismaClient, DocumentRole } from "@prisma/client";
 
-// This file intentionally re-implements token verification and ACL
-// resolution rather than importing from src/lib. The WS server is a
-// separate long-lived process with its own tsconfig and build - it must
-// never depend on Next.js route internals. The two auth boundaries share
-// nothing but the WS_TOKEN_SECRET environment variable and the database.
-
 const prisma = new PrismaClient();
 
 const ROLE_RANK: Record<DocumentRole, number> = {
@@ -23,31 +17,35 @@ export function roleAtLeast(role: DocumentRole | null, min: DocumentRole): boole
   return roleRank >= minRank;
 }
 
-interface TokenPayload {
+interface SessionTokenPayload {
   sub: string;
   documentId: string;
 }
 
+interface ShareTokenPayload {
+  documentId: string;
+  shareToken: string;
+}
+
 export class AuthError extends Error {}
 
-/**
- * Verifies the short-lived token AND independently re-resolves the ACL
- * from Postgres. The token proves who the user claims to be; it never
- * grants a role by itself. This function is the single security boundary
- * for every socket - an unauthorised connection must never reach the
- * relay code below it.
- */
+export interface AuthResult {
+  userId: string;
+  role: DocumentRole;
+  isShareLink: boolean;
+}
+
 export async function authenticateConnection(
   token: string | undefined,
   requestedDocumentId: string
-): Promise<{ userId: string; role: DocumentRole }> {
+): Promise<AuthResult> {
   const secret = process.env.WS_TOKEN_SECRET;
   if (!secret) throw new AuthError("server misconfigured: WS_TOKEN_SECRET missing");
   if (!token) throw new AuthError("missing token");
 
-  let payload: TokenPayload;
+  let payload: SessionTokenPayload | ShareTokenPayload;
   try {
-    payload = jwt.verify(token, secret) as TokenPayload;
+    payload = jwt.verify(token, secret) as SessionTokenPayload | ShareTokenPayload;
   } catch {
     throw new AuthError("invalid or expired token");
   }
@@ -56,14 +54,24 @@ export async function authenticateConnection(
     throw new AuthError("token does not match requested document");
   }
 
+  if ("shareToken" in payload) {
+    const link = await prisma.shareLink.findUnique({
+      where: { token: payload.shareToken },
+      select: { documentId: true, revoked: true },
+    });
+    if (!link || link.revoked || link.documentId !== payload.documentId) {
+      throw new AuthError("share link is invalid or has been revoked");
+    }
+    return { userId: `guest:${payload.shareToken.slice(0, 8)}`, role: DocumentRole.viewer, isShareLink: true };
+  }
+
   const acl = await prisma.documentAcl.findUnique({
     where: { documentId_userId: { documentId: payload.documentId, userId: payload.sub } },
     select: { role: true },
   });
-
   if (!acl) throw new AuthError("no access to this document");
 
-  return { userId: payload.sub, role: acl.role };
+  return { userId: payload.sub, role: acl.role, isShareLink: false };
 }
 
 export { prisma };

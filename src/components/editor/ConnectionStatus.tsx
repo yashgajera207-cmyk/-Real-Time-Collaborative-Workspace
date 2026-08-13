@@ -3,11 +3,11 @@
 import type { ConnectionState } from "@/types";
 import { motion } from "framer-motion";
 
-const CONFIG: Record<ConnectionState, { label: string; dot: string; text: string }> = {
-  connected: { label: "Connected", dot: "bg-live-on", text: "text-live-on" },
-  connecting: { label: "Connecting", dot: "bg-ink-400", text: "text-ink-600" },
-  reconnecting: { label: "Reconnecting", dot: "bg-live-warn", text: "text-live-warn" },
-  offline: { label: "Offline - changes saved locally", dot: "bg-live-off", text: "text-live-off" },
+const CONFIG: Record<ConnectionState, { label: string; dot: string; text: string; bg: string }> = {
+  connected: { label: "Connected", dot: "bg-emerald-500", text: "text-emerald-700", bg: "bg-emerald-50 border-emerald-200/80" },
+  connecting: { label: "Connecting", dot: "bg-ink-400", text: "text-ink-600", bg: "bg-ink-100 border-ink-200" },
+  reconnecting: { label: "Reconnecting", dot: "bg-amber-500", text: "text-amber-700", bg: "bg-amber-50 border-amber-200" },
+  offline: { label: "Offline (Local)", dot: "bg-red-500", text: "text-red-700", bg: "bg-red-50 border-red-200" },
 };
 
 export function ConnectionStatus({
@@ -26,17 +26,17 @@ export function ConnectionStatus({
           ? `Last sync transferred ${lastDeltaBytes} bytes`
           : undefined
       }
-      className="flex items-center gap-2 rounded-full border border-ink-100 bg-white px-3 py-1 text-xs"
+      className={`flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold shadow-2xs transition-all ${cfg.bg}`}
     >
       <span className="relative flex h-2 w-2">
         {state !== "offline" && (
-          <span className={`absolute inline-flex h-full w-full animate-pulse-ring rounded-full ${cfg.dot}`} />
+          <span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-75 ${cfg.dot}`} />
         )}
         <span className={`relative inline-flex h-2 w-2 rounded-full ${cfg.dot}`} />
       </span>
-      <span className={`font-medium ${cfg.text}`}>{cfg.label}</span>
+      <span className={cfg.text}>{cfg.label}</span>
       {lastDeltaBytes != null && (
-        <span className="text-ink-400">· {lastDeltaBytes}B</span>
+        <span className="text-ink-400 font-normal">· {lastDeltaBytes}B</span>
       )}
     </motion.div>
   );

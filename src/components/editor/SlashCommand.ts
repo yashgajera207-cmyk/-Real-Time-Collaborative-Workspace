@@ -7,12 +7,18 @@ import tippy, { type Instance as TippyInstance } from "tippy.js";
 import {
   Heading1,
   Heading2,
+  Heading3,
+  Heading4,
   List,
   ListOrdered,
   CheckSquare,
   Code2,
   Quote,
   ImageIcon,
+  Minus,
+  Highlighter,
+  Subscript as SubscriptIcon,
+  Superscript as SuperscriptIcon,
 } from "lucide-react";
 import { SlashMenuList, type SlashMenuItem, type SlashMenuListRef } from "./SlashMenuList";
 
@@ -26,6 +32,16 @@ const ITEMS: SlashMenuItem[] = [
     title: "Heading 2",
     icon: Heading2,
     command: ({ editor, range }) => editor.chain().focus().deleteRange(range).setNode("heading", { level: 2 }).run(),
+  },
+  {
+    title: "Heading 3",
+    icon: Heading3,
+    command: ({ editor, range }) => editor.chain().focus().deleteRange(range).setNode("heading", { level: 3 }).run(),
+  },
+  {
+    title: "Heading 4",
+    icon: Heading4,
+    command: ({ editor, range }) => editor.chain().focus().deleteRange(range).setNode("heading", { level: 4 }).run(),
   },
   {
     title: "Bullet list",
@@ -51,6 +67,26 @@ const ITEMS: SlashMenuItem[] = [
     title: "Quote",
     icon: Quote,
     command: ({ editor, range }) => editor.chain().focus().deleteRange(range).toggleBlockquote().run(),
+  },
+  {
+    title: "Divider",
+    icon: Minus,
+    command: ({ editor, range }) => editor.chain().focus().deleteRange(range).setHorizontalRule().run(),
+  },
+  {
+    title: "Highlight text",
+    icon: Highlighter,
+    command: ({ editor, range }) => editor.chain().focus().deleteRange(range).toggleHighlight().run(),
+  },
+  {
+    title: "Subscript",
+    icon: SubscriptIcon,
+    command: ({ editor, range }) => editor.chain().focus().deleteRange(range).toggleSubscript().run(),
+  },
+  {
+    title: "Superscript",
+    icon: SuperscriptIcon,
+    command: ({ editor, range }) => editor.chain().focus().deleteRange(range).toggleSuperscript().run(),
   },
   {
     title: "Image",

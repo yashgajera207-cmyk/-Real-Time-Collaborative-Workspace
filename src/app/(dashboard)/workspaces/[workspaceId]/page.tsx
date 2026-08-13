@@ -2,7 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { DocumentList } from "@/components/workspace/DocumentList";
-import { NewDocumentButton } from "@/components/workspace/NewDocumentButton";
+import { WorkspaceHeaderActions } from "@/components/workspace/WorkspaceHeaderActions";
 
 export default async function WorkspacePage({
   params,
@@ -27,13 +27,26 @@ export default async function WorkspacePage({
   });
 
   return (
-    <div className="mx-auto max-w-5xl px-8 py-10">
-      <div className="mb-8 flex items-center justify-between">
+    <div className="mx-auto max-w-6xl px-6 sm:px-10 py-10 space-y-8">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-ink-200/60 pb-6">
         <div>
-          <h1 className="text-2xl font-medium text-ink-900">{membership.workspace.name}</h1>
-          <p className="text-sm text-ink-500">{documents.length} document(s) you can access</p>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-ink-900">
+              {membership.workspace.name}
+            </h1>
+            <span className="rounded-full bg-accent-50 border border-accent-200 px-2.5 py-0.5 text-xs font-semibold text-accent-700 capitalize">
+              {membership.role}
+            </span>
+          </div>
+          <p className="text-sm text-ink-500 mt-1">
+            {documents.length} top-level {documents.length === 1 ? "document" : "documents"} accessible to you
+          </p>
         </div>
-        <NewDocumentButton workspaceId={workspaceId} />
+        <WorkspaceHeaderActions
+          workspaceId={workspaceId}
+          workspaceName={membership.workspace.name}
+          role={membership.role}
+        />
       </div>
 
       <DocumentList

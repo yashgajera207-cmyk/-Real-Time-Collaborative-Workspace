@@ -49,12 +49,7 @@ export async function GET(
         createdAt: c.createdAt,
         author: c.author,
       })),
-    })),
-    {
-      headers: {
-        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
-      },
-    }
+    }))
   );
 }
 
@@ -99,17 +94,7 @@ export async function POST(
         },
       },
     },
-  });
-
-  const fullThread = await prisma.commentThread.findUnique({
-    where: { id: thread.id },
-    include: {
-      createdBy: { select: { id: true, name: true } },
-      comments: {
-        orderBy: { createdAt: "asc" },
-        include: { author: { select: { id: true, name: true } } },
-      },
-    },
+    include: { comments: { include: { author: { select: { id: true, name: true } } } } },
   });
 
   await notifyMentions({
@@ -118,25 +103,7 @@ export async function POST(
     actorId: session.user.id,
     actorName: session.user.name ?? "Someone",
     mentionedUserIds: data.mentionedUserIds,
-    commentBody: data.body,
   });
 
-  return NextResponse.json(
-    {
-      id: fullThread!.id,
-      resolved: fullThread!.resolved,
-      quotedText: fullThread!.quotedText,
-      anchorStart: Buffer.from(fullThread!.anchorStart).toString("base64"),
-      anchorEnd: Buffer.from(fullThread!.anchorEnd).toString("base64"),
-      createdAt: fullThread!.createdAt,
-      createdBy: fullThread!.createdBy,
-      comments: fullThread!.comments.map((c) => ({
-        id: c.id,
-        body: c.body,
-        createdAt: c.createdAt,
-        author: c.author,
-      })),
-    },
-    { status: 201 }
-  );
+  return NextResponse.json(thread, { status: 201 });
 }

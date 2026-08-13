@@ -119,3 +119,29 @@ export async function PATCH(
 
   return NextResponse.json({ id: updated.id, title: updated.title, parentId: updated.parentId });
 }
+
+// DELETE /api/documents/:documentId -> Delete document (Document Owner ONLY)
+export async function DELETE(
+  _req: Request,
+  { params }: { params: Promise<{ documentId: string }> }
+) {
+  const session = await auth();
+  if (!session?.user?.id) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
+  const { documentId } = await params;
+  const role = await resolveDocumentRole(session.user.id, documentId);
+
+  // Strictly enforce Document Owner permission
+  if (role !== DocumentRole.owner) {
+    return NextResponse.json({ error: "Only the document owner can delete this document" }, { status: 403 });
+  }
+
+  const document = await prisma.document.findUnique({ where: { id: documentId } });
+  if (!document) return NextResponse.json({ error: "not found" }, { status: 404 });
+
+  await prisma.document.delete({
+    where: { id: documentId },
+  });
+
+  return NextResponse.json({ success: true, workspaceId: document.workspaceId });
+}

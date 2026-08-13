@@ -1,10 +1,11 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { MessageSquare, Check, RotateCcw } from "lucide-react";
+import { MessageSquare, Check, RotateCcw, AlertTriangle } from "lucide-react";
 import type { ThreadEntry } from "@/lib/use-comments";
 import type { WorkspaceMember } from "@/lib/use-workspace-members";
 import { MentionComposer } from "./MentionComposer";
+import { Avatar } from "@/components/ui/Avatar";
 
 function timeAgo(iso: string): string {
   const diffMs = Date.now() - new Date(iso).getTime();
@@ -39,15 +40,27 @@ export function CommentsSidebar({
 }: CommentsSidebarProps) {
   if (threads.length === 0) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center text-sm text-ink-400">
-        <MessageSquare className="h-5 w-5" />
-        <p>No comments yet. Select text in the document to start a thread.</p>
+      <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center text-sm text-ink-400">
+        <div className="h-10 w-10 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center">
+          <MessageSquare className="h-5 w-5" />
+        </div>
+        <h4 className="font-bold text-ink-800">No comments yet</h4>
+        <p className="text-xs text-ink-500 max-w-xs leading-relaxed">
+          Select any text in the document to start an anchored comment thread.
+        </p>
       </div>
     );
   }
 
   return (
-    <div className="flex h-full flex-col gap-3 overflow-y-auto p-3">
+    <div className="flex h-full flex-col gap-3 overflow-y-auto p-3.5 space-y-1">
+      <div className="flex items-center justify-between pb-2 border-b border-ink-100 px-1">
+        <span className="text-xs font-bold uppercase tracking-wider text-ink-500">Comment Threads</span>
+        <span className="rounded-full bg-accent-100 px-2 py-0.5 text-[10px] font-bold text-accent-700">
+          {threads.filter((t) => !t.resolved).length} active
+        </span>
+      </div>
+
       <AnimatePresence initial={false}>
         {threads.map((thread) => {
           const isActive = thread.id === activeThreadId;
@@ -60,56 +73,64 @@ export function CommentsSidebar({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, height: 0 }}
               onClick={() => onSelectThread(thread.id)}
-              className={`cursor-pointer rounded-xl border p-3 transition-colors ${
-                isActive ? "border-accent-400 bg-accent-50" : "border-ink-100 bg-white hover:border-ink-200"
-              } ${thread.resolved ? "opacity-60" : ""}`}
+              className={`cursor-pointer rounded-2xl border p-4 transition-all duration-150 ${
+                isActive
+                  ? "border-amber-400 bg-amber-50/60 shadow-xs ring-1 ring-amber-400/30"
+                  : "border-ink-200/80 bg-white hover:border-ink-300 hover:shadow-2xs"
+              } ${thread.resolved ? "opacity-60 bg-ink-50/50" : ""}`}
             >
-              <p className="mb-2 line-clamp-1 border-l-2 border-ink-200 pl-2 text-xs italic text-ink-400">
+              <p className="mb-2.5 line-clamp-2 border-l-2 border-amber-400 pl-2.5 text-xs italic text-ink-600 font-medium">
                 "{thread.quotedText}"
               </p>
 
               {isOrphaned && (
-                <p className="mb-2 text-[11px] font-medium text-live-warn">
-                  The commented text was deleted - this thread is orphaned.
-                </p>
+                <div className="mb-2.5 flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-100/60 p-2 text-[11px] font-semibold text-amber-800">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                  <span>Commented text was deleted — thread orphaned.</span>
+                </div>
               )}
 
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-2.5">
                 {thread.comments.map((c) => (
-                  <div key={c.id} className="text-sm">
-                    <span className="font-medium text-ink-900">{c.author.name}</span>{" "}
-                    <span className="text-xs text-ink-400">{timeAgo(c.createdAt)}</span>
-                    <p className="text-ink-700">{c.body}</p>
+                  <div key={c.id} className="text-xs space-y-1 bg-white/80 rounded-xl p-2.5 border border-ink-100/60 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <Avatar name={c.author.name} size={18} />
+                        <span className="font-bold text-ink-900">{c.author.name}</span>
+                      </div>
+                      <span className="text-[10px] text-ink-400 font-medium">{timeAgo(c.createdAt)}</span>
+                    </div>
+                    <p className="text-ink-700 leading-relaxed pl-6">{c.body}</p>
                   </div>
                 ))}
               </div>
 
-              <div className="mt-2 flex items-center justify-between">
+              <div className="mt-3 flex items-center justify-between pt-2 border-t border-ink-100">
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     void onSetResolved(thread.id, !thread.resolved);
                   }}
-                  className="flex items-center gap-1 text-xs text-ink-500 hover:text-ink-900"
+                  className="flex items-center gap-1 text-xs font-semibold text-ink-600 hover:text-ink-900 transition-colors"
                 >
                   {thread.resolved ? (
                     <>
-                      <RotateCcw className="h-3.5 w-3.5" /> Reopen
+                      <RotateCcw className="h-3.5 w-3.5 text-ink-500" /> Reopen
                     </>
                   ) : (
                     <>
-                      <Check className="h-3.5 w-3.5" /> Resolve
+                      <Check className="h-3.5 w-3.5 text-emerald-600" /> Resolve
                     </>
                   )}
                 </button>
               </div>
 
               {isActive && canComment && (
-                <div className="mt-3 border-t border-ink-100 pt-3" onClick={(e) => e.stopPropagation()}>
+                <div className="mt-3 border-t border-ink-200/60 pt-3" onClick={(e) => e.stopPropagation()}>
                   <MentionComposer
                     members={members}
                     submitLabel="Reply"
-                    placeholder="Reply, or @mention someone"
+                    placeholder="Reply, or @mention someone..."
                     onSubmit={(body, ids) => onReply(thread.id, body, ids)}
                   />
                 </div>

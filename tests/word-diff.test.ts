@@ -17,6 +17,7 @@ describe("diffWords", () => {
     expect(result.some((p) => p.type === "removed" && p.text.includes("brave"))).toBe(true);
   });
 
+
   it("handles empty strings without throwing", () => {
     expect(() => diffWords("", "")).not.toThrow();
     expect(diffWords("", "hello")[0]).toMatchObject({ type: "added" });

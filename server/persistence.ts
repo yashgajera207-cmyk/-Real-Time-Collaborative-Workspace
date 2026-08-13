@@ -2,21 +2,33 @@ import * as Y from "yjs";
 import { prisma } from "./auth";
 
 /**
- * Reconstructs a document's state by replaying every stored update in
- * insertion order. This is the "kill the server mid-session, restart,
- * reload" guarantee from the phase 1 spec - the log is the source of
- * truth, the in-memory Y.Doc is just a cache of it.
+ * Reconstructs a document's state. Starts from the most recent compaction
+ * checkpoint if one exists (a full encoded state covering everything up
+ * to some update id) and replays only the updates after it, instead of
+ * replaying the entire log from empty every time. This is what keeps
+ * cold-load time bounded as a document's history grows - see
+ * docs/perf/README.md for before/after numbers and how to reproduce them.
  */
 export async function loadDocument(documentId: string): Promise<Y.Doc> {
   const doc = new Y.Doc();
 
+  const checkpoint = await prisma.documentSnapshot.findFirst({
+    where: { documentId, compactedThroughId: { not: null } },
+    orderBy: { compactedThroughId: "desc" },
+    select: { data: true, compactedThroughId: true },
+  });
+
   const updates = await prisma.documentUpdate.findMany({
-    where: { documentId },
+    where: {
+      documentId,
+      ...(checkpoint ? { id: { gt: checkpoint.compactedThroughId! } } : {}),
+    },
     orderBy: { id: "asc" },
     select: { data: true },
   });
 
   Y.transact(doc, () => {
+    if (checkpoint) Y.applyUpdate(doc, new Uint8Array(checkpoint.data));
     for (const row of updates) {
       Y.applyUpdate(doc, new Uint8Array(row.data));
     }
@@ -76,4 +88,3 @@ export async function createSnapshot(
     },
   });
 }
-

@@ -61,26 +61,28 @@ function TreeItem({ node, depth }: { node: TreeNode; depth: number }) {
         }}
         onDragLeave={() => setDragOver(false)}
         onDrop={handleDrop}
-        style={{ paddingLeft: depth * 14 }}
-        className={`group flex items-center gap-1 rounded-md py-1 pr-2 text-sm transition-colors
-          ${active ? "bg-white font-medium text-ink-900 shadow-sm" : "text-ink-600 hover:bg-white/70"}
-          ${dragOver ? "ring-2 ring-accent-400" : ""}`}
+        style={{ paddingLeft: depth * 12 + 6 }}
+        className={`group relative flex items-center gap-1.5 rounded-xl py-1.5 pr-2.5 text-xs font-medium transition-all ${
+          active
+            ? "bg-white text-ink-900 font-semibold shadow-2xs border border-ink-200/50"
+            : "text-ink-600 hover:bg-white/60 hover:text-ink-900"
+        } ${dragOver ? "ring-2 ring-accent-500 bg-accent-50/50" : ""}`}
       >
         <button
           onClick={toggleExpand}
-          className="flex h-4 w-4 shrink-0 items-center justify-center text-ink-400"
+          className="flex h-4 w-4 shrink-0 items-center justify-center text-ink-400 hover:text-ink-700 transition-colors"
           aria-label={expanded ? "Collapse" : "Expand"}
         >
-          <ChevronRight className={`h-3 w-3 transition-transform ${expanded ? "rotate-90" : ""}`} />
+          <ChevronRight className={`h-3.5 w-3.5 transition-transform duration-200 ${expanded ? "rotate-90 text-ink-700" : ""}`} />
         </button>
-        <FileText className="h-3.5 w-3.5 shrink-0 text-ink-400" />
-        <Link href={`/documents/${node.id}`} className="truncate">
+        <FileText className={`h-3.5 w-3.5 shrink-0 ${active ? "text-accent-600" : "text-ink-400 group-hover:text-ink-600"}`} />
+        <Link href={`/documents/${node.id}`} className="truncate flex-1">
           {node.title}
         </Link>
       </motion.div>
 
       {expanded && children && children.length > 0 && (
-        <div>
+        <div className="relative border-l border-ink-200/40 ml-3.5 my-0.5">
           {children.map((child) => (
             <TreeItem key={child.id} node={child} depth={depth + 1} />
           ))}

@@ -27,15 +27,15 @@ export function PresenceAvatarStack({ entries }: { entries: PresenceEntry[] }) {
             transition={{ duration: 0.18 }}
             title={entry.isLocal ? `${entry.name} (you)` : entry.name}
             style={{ background: entry.color }}
-            className="flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-medium
-              text-white ring-2 ring-white"
+            className="flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-bold
+              text-white ring-2 ring-white shadow-2xs select-none"
           >
             {initials(entry.name)}
           </motion.div>
         ))}
       </AnimatePresence>
       {overflow > 0 && (
-        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-ink-200 text-[11px] font-medium text-ink-700 ring-2 ring-white">
+        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-ink-200 text-[10px] font-bold text-ink-700 ring-2 ring-white shadow-2xs">
           +{overflow}
         </div>
       )}
