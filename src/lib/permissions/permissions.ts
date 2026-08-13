@@ -52,6 +52,10 @@ export async function resolveDocumentRole(
     select: { role: true },
   });
   if (wsMembership?.role === "owner") return DocumentRole.owner;
+  if (wsMembership?.role === "admin" || wsMembership?.role === "member") {
+    if (acl?.role) return acl.role;
+    return DocumentRole.editor;
+  }
 
   if (acl?.role) return acl.role;
 

@@ -95,8 +95,11 @@ async function resolveDocumentRole(
     where: { userId_workspaceId: { userId, workspaceId: doc.workspaceId } },
     select: { role: true },
   });
-  if (wsMembership?.role === DocumentRole.owner) return DocumentRole.owner;
-  if (wsMembership?.role) return wsMembership.role;
+  if (wsMembership?.role === "owner") return DocumentRole.owner;
+  if (wsMembership?.role === "admin" || wsMembership?.role === "member") {
+    if (acl?.role) return acl.role;
+    return DocumentRole.editor;
+  }
 
   if (acl?.role) return acl.role;
 
