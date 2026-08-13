@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "concurrently -k -n NEXT,WS -c blue,magenta \"next dev\" \"tsx watch server/index.ts\"",
-    "build": "next build",
+    "build": "prisma generate && next build",
+    "postinstall": "prisma generate",
     "start": "next start",
     "ws": "tsx server/index.ts",
     "ws:build": "tsc -p server/tsconfig.json",
