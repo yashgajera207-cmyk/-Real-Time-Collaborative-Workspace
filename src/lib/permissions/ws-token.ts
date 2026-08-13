@@ -10,14 +10,16 @@ export interface ShareWsTokenPayload {
   documentId: string;
 }
 
-const SECRET = process.env.WS_TOKEN_SECRET;
+function getSecret(): string {
+  const secret = process.env.WS_TOKEN_SECRET;
+  if (!secret) throw new Error("WS_TOKEN_SECRET is not set");
+  return secret;
+}
 
 export function signWsToken(payload: SessionWsTokenPayload): string {
-  if (!SECRET) throw new Error("WS_TOKEN_SECRET is not set");
-  return jwt.sign(payload, SECRET, { expiresIn: "60s" });
+  return jwt.sign(payload, getSecret(), { expiresIn: "60s" });
 }
 
 export function signShareWsToken(payload: ShareWsTokenPayload): string {
-  if (!SECRET) throw new Error("WS_TOKEN_SECRET is not set");
-  return jwt.sign(payload, SECRET, { expiresIn: "60s" });
+  return jwt.sign(payload, getSecret(), { expiresIn: "60s" });
 }
