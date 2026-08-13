@@ -194,8 +194,42 @@ export class QuillWebsocketProvider {
         Y.applyUpdate(this.doc, bytes, this);
         this.emitSyncStats({ deltaBytes: bytes.byteLength, direction: "received" });
       }
+
+      // Apply remote user awareness presence and live cursors
+      if (Array.isArray(data.awarenessStates)) {
+        for (const base64Awareness of data.awarenessStates) {
+          if (typeof base64Awareness === "string") {
+            const binaryString = atob(base64Awareness);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+              bytes[i] = binaryString.charCodeAt(i);
+            }
+            applyAwarenessUpdate(this.awareness, bytes, this);
+          }
+        }
+      }
     } catch {
       // Ignore transient fetch errors
+    }
+  }
+
+  private async pushHttpAwareness(awarenessUpdate: Uint8Array): Promise<void> {
+    if (this.destroyed) return;
+    try {
+      let binaryString = "";
+      for (let i = 0; i < awarenessUpdate.length; i++) {
+        const byte = awarenessUpdate[i];
+        if (byte !== undefined) binaryString += String.fromCharCode(byte);
+      }
+      const base64Awareness = btoa(binaryString);
+
+      await fetch(`/api/documents/${this.options.documentId}/sync`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ awareness: base64Awareness, clientId: this.doc.clientID }),
+      });
+    } catch {
+      // Ignore transient push errors
     }
   }
 
@@ -236,9 +270,11 @@ export class QuillWebsocketProvider {
     if (origin === this) return;
     const changedClients = [...changes.added, ...changes.updated, ...changes.removed];
     if (changedClients.length === 0) return;
+    const update = encodeAwarenessUpdate(this.awareness, changedClients);
     if (this.ws?.readyState === WebSocket.OPEN) {
-      const update = encodeAwarenessUpdate(this.awareness, changedClients);
       this.ws.send(encodeMessage(MSG_AWARENESS, update));
+    } else if (this.isHttpSyncActive) {
+      void this.pushHttpAwareness(update);
     }
   };
 
