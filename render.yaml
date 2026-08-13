@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: quill-ws-server
+    env: node
+    buildCommand: npm run ws:build
+    startCommand: node server-dist/index.js
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: WS_TOKEN_SECRET
+        sync: false
+      - key: WS_PORT
+        value: "1234"
