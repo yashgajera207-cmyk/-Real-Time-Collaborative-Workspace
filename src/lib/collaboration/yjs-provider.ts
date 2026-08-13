@@ -173,8 +173,12 @@ export class QuillWebsocketProvider {
     await this.fetchHttpState();
 
     if (typeof window !== "undefined") {
+      // Poll remote edits & online presence every 1.5 seconds
       this.httpPollTimer = setInterval(() => {
         void this.fetchHttpState();
+        // Heartbeat: push local awareness presence continuously so avatars & cursors stay online
+        const update = encodeAwarenessUpdate(this.awareness, [this.doc.clientID]);
+        void this.pushHttpAwareness(update);
       }, 1500);
     }
   }
